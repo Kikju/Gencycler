@@ -1,12 +1,11 @@
 package goldzweigapps.com.compiler.generators
 
 import com.squareup.kotlinpoet.*
-import goldzweigapps.com.compiler.models.Adapter
-
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.plusParameter
 import com.squareup.kotlinpoet.jvm.jvmOverloads
 import goldzweigapps.com.compiler.consts.*
+import goldzweigapps.com.compiler.models.Adapter
 import goldzweigapps.com.compiler.models.ViewType
 import goldzweigapps.com.compiler.utils.simpleEnumName
 import goldzweigapps.com.compiler.utils.simpleParameterName
@@ -16,9 +15,7 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 
 	private val mutableList = ClassName(Packages.KOTLIN_COLLECTIONS, "MutableList")
 	private val contextClassName = ClassName(Packages.ANDROID_CONTENT, "Context")
-
-	private val recyclerAdapterSuperClass = ClassName(Packages.GENCYCLER,
-			"GencyclerRecyclerAdapter")
+	private val asyncDifferConfigClassName = ClassName(Packages.RECYCLER_WIDGET, "AsyncDifferConfig")
 
 	private val viewHolderClassName = ClassName(Packages.ANDROID_VIEW, "ViewGroup")
 
@@ -87,7 +84,8 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 						.addAll(listOf(
 								generateCreateViewHolderFunc(viewType),
 								generateBindViewHolderFunc(viewType,
-										adapter.clickable, adapter.longClickable),
+										adapter.clickable, adapter.longClickable,
+                                        listAdapter = adapter.listAdapter),
 								generateRecycleViewHolderFunc(viewHolder)))
 			}
 
@@ -149,11 +147,13 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 						generateBindViewHolderFunc(
 								codeBlockBuilder = bindViewHolderCodeBuilder,
 								clickable = adapter.clickable,
-								longClickable = adapter.longClickable),
+								longClickable = adapter.longClickable,
+                                listAdapter = adapter.listAdapter),
 
 						generateItemViewTypeFunc(
 								codeBlockBuilder = itemViewTypeCodeBuilder,
-								supportViewTypesNames = supportedViewTypesSimpleName),
+								supportViewTypesNames = supportedViewTypesSimpleName,
+                                listAdapter = adapter.listAdapter),
 
 						generateRecycleViewHolderFunc(
 								codeBlockBuilder = recycleViewHolderCodeBuilder)))
@@ -162,7 +162,7 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 
 
 		adapterClassBuilder
-				.superclass(recyclerAdapterSuperClass
+				.superclass(recyclerAdapterSuperClass(adapter)
 						.plusParameter(parametrizedType)
 						.plusParameter(parametrizedHolderType))
 
@@ -187,14 +187,21 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 			abstractFunctions.add(generateAbstractPerformFilterFunc(parametrizedType))
 		}
 
-		adapterConstructor
-				.addParameter(ParameterSpec.builder(Names.ELEMENTS,
-						mutableList.parameterizedBy(parametrizedType))
-						.defaultValue("ArrayList()")
-						.build())
-				.addParameter(ParameterSpec.builder(Names.UPDATE_UI, BOOLEAN)
-						.defaultValue("true")
-						.build())
+        if (!adapter.listAdapter) {
+            adapterConstructor
+                    .addParameter(ParameterSpec.builder(Names.ELEMENTS,
+                            mutableList.parameterizedBy(parametrizedType))
+                            .defaultValue("ArrayList()")
+                            .build())
+                    .addParameter(ParameterSpec.builder(Names.UPDATE_UI, BOOLEAN)
+                            .defaultValue("true")
+                            .build())
+        }
+        else {
+            adapterConstructor
+                    .addParameter(ParameterSpec.builder(Names.CONFIG, asyncDifferConfigClassName)
+                            .build())
+        }
 
 		if (adapter.clickable) {
 			val onClickName = Names.ON_CLICK_LISTENER
@@ -234,16 +241,29 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 				.addType(adapterClassBuilder
 						.addModifiers(KModifier.ABSTRACT)
 						.primaryConstructor(adapterConstructor.build())
-						.addSuperclassConstructorParameter("%L, %L, %L",
-								Names.CONTEXT,
-								Names.ELEMENTS,
-								Names.UPDATE_UI)
+                        .apply {
+                            if (!adapter.listAdapter) {
+                                addSuperclassConstructorParameter("%L, %L, %L",
+                                        Names.CONTEXT,
+                                        Names.ELEMENTS,
+                                        Names.UPDATE_UI)
+                            }
+                            else {
+                                addSuperclassConstructorParameter("%L, %L",
+                                        Names.CONTEXT,
+                                        Names.CONFIG)
+                            }
+                        }
 						.addFunctions(setupFunctions)
 						.addFunctions(abstractFunctions)
 						.build())
 				.build()
 	}
 
+    private fun recyclerAdapterSuperClass(adapter: Adapter): ClassName = if (!adapter.listAdapter)
+        ClassName(Packages.GENCYCLER, Names.GENCYCLER_RECYCLER_ADAPTER)
+    else
+        ClassName(Packages.GENCYCLER, Names.GENCYCLER_LIST_ADAPTER)
 
 	private fun generateCreateViewHolderFunc(viewType: ViewType? = null,
 											 codeBlockBuilder: CodeBlock.Builder? = null,
@@ -283,9 +303,10 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 	private fun generateBindViewHolderFunc(viewType: ViewType? = null,
 										   clickable: Boolean = false,
 										   longClickable: Boolean = false,
-										   codeBlockBuilder: CodeBlock.Builder? = null): FunSpec {
+										   codeBlockBuilder: CodeBlock.Builder? = null,
+                                           listAdapter: Boolean): FunSpec {
 
-		var elementDeceleration = "elements[position]"
+		var elementDeceleration = if (!listAdapter) "elements[position]" else "get(position)"
 		val bindViewHolderFunctionBuilder = FunSpec.builder(Methods.ON_BIND_VIEW_HOLDER)
 				.addModifiers(KModifier.OVERRIDE)
 
@@ -366,12 +387,13 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
 	}
 
 	private fun generateItemViewTypeFunc(codeBlockBuilder: CodeBlock.Builder,
-										 supportViewTypesNames: List<String>): FunSpec {
+										 supportViewTypesNames: List<String>,
+                                         listAdapter: Boolean): FunSpec {
 		return FunSpec.builder(Methods.GET_VIEW_TYPE)
 				.addModifiers(KModifier.OVERRIDE)
 				.addParameter(Parameters.POSITION_PARAMETER_SPEC)
 				.returns(INT)
-				.addStatement("val element = elements[position]")
+				.addStatement("val element = ${if (!listAdapter) "elements[position]" else "get(position)"}")
 				.addStatement("")
 				.beginControlFlow("return when (element)")
 				.addCode(codeBlockBuilder

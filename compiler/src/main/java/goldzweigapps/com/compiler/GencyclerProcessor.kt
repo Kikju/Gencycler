@@ -145,6 +145,39 @@ class GencyclerProcessor : AbstractProcessor() {
 
 				}
 
+		roundEnvironment
+				.getElementsAnnotatedWith(GencyclerListAdapter::class.java)
+				.forEach {
+
+					val adapter = it.getAnnotation(GencyclerListAdapter::class.java)
+
+					val clickable = it.getAnnotation(Clickable::class.java) != null
+					val longClickable = it.getAnnotation(LongClickable::class.java) != null
+					val filterable = it.getAnnotation(Filterable::class.java) != null
+
+					val adapterViewTypes = adapter.holders.map { holderName ->
+						viewTypes[holderName] ?: throw IllegalArgumentException("""
+                                No generated ViewHolder found for $holderName.
+                                Are you sure you it was annotated with GencyclerViewHolder?
+                            """.trimIndent())
+					}
+
+					val adapterName = if (adapter.customName.isEmpty()) {
+						"Generated${it.simpleName}"
+					} else {
+						adapter.customName
+					}
+
+					val generatedAdapter = Adapter(adapterName,
+							EnvironmentUtil.getPackgeName(it),
+							adapterViewTypes,
+							clickable, longClickable, filterable, true)
+
+					recyclerAdapterGenerator.generate(generatedAdapter)
+							.writeTo(EnvironmentUtil.generateOutputFile(generatedAdapter.name))
+
+				}
+
 		return false
 	}
 
@@ -154,12 +187,22 @@ class GencyclerProcessor : AbstractProcessor() {
 	override fun getSupportedAnnotationTypes(): Set<String> =
 			setOf(GencyclerViewHolder::class.java.canonicalName,
 					GencyclerAdapter::class.java.canonicalName,
+					GencyclerListAdapter::class.java.canonicalName,
 					Clickable::class.java.canonicalName,
 					LongClickable::class.java.canonicalName,
 					Filterable::class.java.canonicalName)
 
 
 	private inline val GencyclerAdapter.holders: List<String>
+		get() {
+			return try {
+				value.map { it.qualifiedName ?: "" }
+			} catch (e: MirroredTypesException) {
+				e.typeMirrors.map(TypeMirror::toString)
+			}
+		}
+
+	private inline val GencyclerListAdapter.holders: List<String>
 		get() {
 			return try {
 				value.map { it.qualifiedName ?: "" }

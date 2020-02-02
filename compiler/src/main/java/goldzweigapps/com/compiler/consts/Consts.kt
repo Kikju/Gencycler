@@ -76,6 +76,7 @@ object Packages {
 	const val ANDROID_VIEW = "android.view"
 	const val SUPPORT_WIDGET = "android.support.v7.widget"
 	const val ANDROID_WIDGET = "android.widget"
+	const val RECYCLER_WIDGET = "androidx.recyclerview.widget"
 
 	const val KOTLIN_COLLECTIONS = "kotlin.collections"
 }
@@ -123,11 +124,15 @@ object Methods {
 }
 
 object Names {
+	const val GENCYCLER_RECYCLER_ADAPTER = "GencyclerRecyclerAdapter"
+	const val GENCYCLER_LIST_ADAPTER = "GencyclerListAdapter"
+
 	const val VIEW = "view"
 	const val ELEMENTS = "elements"
 	const val ELEMENT = "element"
 	const val CONTEXT = "context"
 	const val UPDATE_UI = "updateUi"
+	const val CONFIG = "config"
 	const val ID = "id"
 	const val POSITION = "position"
 	const val MULTI_LINE_ESCAPED = "\"\"\""

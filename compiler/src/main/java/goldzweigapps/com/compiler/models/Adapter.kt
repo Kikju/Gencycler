@@ -9,4 +9,5 @@ data class Adapter(val name: String,
                    val viewTypes: List<ViewType>,
 				   val clickable: Boolean = false,
 				   val longClickable: Boolean = false,
-				   val filterable: Boolean = false)
+				   val filterable: Boolean = false,
+				   val listAdapter: Boolean = false)
