@@ -199,8 +199,9 @@ class RecyclerAdapterGenerator(private val rClass: ClassName) {
         }
         else {
             adapterConstructor
-                    .addParameter(ParameterSpec.builder(Names.CONFIG, asyncDifferConfigClassName)
-                            .build())
+					.addParameter(ParameterSpec.builder(Names.CONFIG,
+							asyncDifferConfigClassName.parameterizedBy(parametrizedType))
+							.build())
         }
 
 		if (adapter.clickable) {

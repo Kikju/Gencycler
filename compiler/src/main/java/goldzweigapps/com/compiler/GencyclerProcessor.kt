@@ -163,7 +163,7 @@ class GencyclerProcessor : AbstractProcessor() {
 					}
 
 					val adapterName = if (adapter.customName.isEmpty()) {
-						"Generated${it.simpleName}"
+						"GeneratedList${it.simpleName}"
 					} else {
 						adapter.customName
 					}
